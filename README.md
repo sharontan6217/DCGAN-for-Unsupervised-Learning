@@ -1,4 +1,6 @@
 # DCGAN-for-Unsupervised-Learning
+Efficiency and performance still need improvement. Might be helpful.
+
 data downloaded web address: https://zenodo.org/record/3678171
 # reference: 
 1. http://dcase.community/challenge2020/task-unsupervised-detection-of-anomalous-sounds#baseline-system
