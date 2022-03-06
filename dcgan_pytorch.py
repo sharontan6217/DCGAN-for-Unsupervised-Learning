@@ -7,13 +7,8 @@ Original file is located at
     https://colab.research.google.com/drive/1ueRKpg9wlvEBsnHcBgCr3KhO26jzqvDL
 """
 
-pip install pydub
 
-mkdir drive/MyDrive/asd/graph/distribution/pytorch/dcgan/
 
-pip install datetime
-
-from torch.nn.modules.activation import Softmax2d
 
 import pandas as pd
 import numpy as np
@@ -47,6 +42,7 @@ from torch.optim import Adamax, Adam
 import torchvision.utils as vutils
 from torch.utils.data import DataLoader, TensorDataset
 from typing import Tuple
+from torch.nn.modules.activation import Softmax2d
 
 import datetime
 from datetime import timedelta
@@ -55,11 +51,6 @@ from datetime import timedelta
 
 import tensorflow as tf
 
-
-
-
-
-#from torch.nn import utils
 from tensorflow.keras import utils
 
 from tensorflow.python.client import device_lib
@@ -103,10 +94,10 @@ graph_dir_5='drive/MyDrive/asd/graph/prCurve/pytorch/dcgan/'
 
 file_format='.wav'
 
-noise_factor=0.005
+noise_factor=0.2
 
-sample_count=50
-predict_count=6
+sample_count=100
+predict_count=10
 
 
 
@@ -125,9 +116,9 @@ n3=n0+PopulationSize+PredictSize
 n4=n0+PopulationSize+GapSize+PredictSize
 
 
-learning_rate_d=0.00001
-learning_rate_g=0.00001
-learning_rate_c=0.00002
+learning_rate_d=0.00002
+learning_rate_g=0.00002
+learning_rate_c=0.00004
 criterion=torch.nn.MSELoss()
 #criterion=torch.nn.BCELoss()
 beta1=0.5
@@ -210,8 +201,8 @@ class data_preprocessing():
             audioString=wavFile.readframes(wavFile.getnframes())
             audioText=struct.unpack('%ih' % (wavFile.getnframes()*wavFile.getnchannels()),audioString)
             
-            #noise = np.random.uniform(low=-1.0, high=1.0, size=len(audioText))*noise_factor
-            #audioText=audioText+noise
+            noise = np.random.uniform(low=-1.0, high=1.0, size=len(audioText))*noise_factor
+            audioText=audioText+noise
             
             #audioText=data_preprocessing.denoise(self=self,xn=audioText)
             audioText=[float(val)/pow(2,15) for val in audioText]
@@ -245,7 +236,7 @@ class data_preprocessing():
             audioString_b=wavFile_b.readframes(wavFile_b.getnframes())
             audioText_b=struct.unpack('%ih' % (wavFile_b.getnframes()*wavFile_b.getnchannels()),audioString_b)
 
-            #audioText_b=audioText_b+noise
+            audioText_b=audioText_b+noise
             
             #audioText_b=data_preprocessing.denoise(self=self,xn=audioText_b)
             audioText_b=[float(val_b)/pow(2,15) for val_b in audioText_b]
@@ -390,20 +381,7 @@ class data_preprocessing():
         print('features is : ',features)
 
         return x_train,y_train,x_test,y_test,features,df_consolidated,data_train,data_test,y,m,t
-    
-    def denoise(self,xn):
-        '''
-        sos = butter(3,noise_factor,'lowpass',t,'sos')
-        y=sosfilt(sos,xn)
-        '''
-        b,a=butter(2,0.05)
-        zi=lfilter_zi(b,a)
-        
-        z,_=lfilter(b,a,xn,zi=zi*xn[0])
-        z2,_=lfilter(b,a,z,zi=zi*z[0])
-        y=filtfilt(b,a,xn)
-        
-        return y
+
     
     def LoaderSplit(x):
         X=x[:-1]
@@ -466,8 +444,6 @@ class BuildGenerator(torch.nn.Module):
 
         
 class BuildDiscriminator(torch.nn.Module):
-        # We will map z, a latent vector, to continuous returns data space (..., 1)
-
     def __init__(self,
                  gpu_unit,
                  features):
@@ -538,9 +514,6 @@ class DCGANAnalysis():
         args, _, _, values = inspect.getargvalues(inspect.currentframe())
         values.pop("self")
         
-
-
-        
         for arg, val in values.items():
             setattr(self, arg, val)
         
@@ -584,15 +557,7 @@ class DCGANAnalysis():
         
         num_train = X.shape[0]
         start = 0
-        
-        
-        
-        # Adversarial ground truths.
-        #noise_=torch.randn(X.size(0),1,X.size(1),2)
 
-          
-        
-        
         #scaler=MinMaxScaler()
         generator_losses=[]
         discriminator_losses=[]
@@ -604,9 +569,6 @@ class DCGANAnalysis():
 
             idx=np.random.randint(low=0,high=X.shape[0],size=batch_size)
             raw_data=X[idx]
-            #print(raw_data.shape)
-            #print(raw_data.size(0))
-
 
             # Get a batch of real returns data...
 
@@ -622,13 +584,7 @@ class DCGANAnalysis():
             D_x=output_real.mean().item()
 
             # Train the discriminator.
-
-            # Generate a new batch of noise...
             noise=torch.randn(raw_data.size(0),raw_data.size(1),raw_data.size(2),raw_data.size(3),device=device)
-            #print('the shape of noise is:',noise.shape)
-
-            # ...and generate a batch of synthetic returns data.
-
             generated_data = self.generator(noise)
             output_fake=self.discriminator(generated_data.detach())
             fake=torch.full(size=(output_fake.size(0),output_fake.size(1),output_fake.size(2)),fill_value=0,dtype=torch.float,device=device)
@@ -653,15 +609,9 @@ class DCGANAnalysis():
 
             if start>num_train-batch_size:
                 start=0
-            '''
-            if start %100==0:
-                with torch.no_grad():
-                    fake=self.generator(noise_).detach().cpu()
-                audio_list +=vutils.make_grid(fake,padding=2,normalize=True)
-            '''
-            
+     
             if epoch %5==0:
-                print("Epoch={},\t batch={},\t Loss_D={:2.4f},\t Loss_G={},,\t D_x={},\t D(G(z))_1={:2.4f},\t D(G(z))_2={}".format(epoch+1,i,d_loss.item(),g_loss.item(),D_x,D_G_z1,D_G_z2))
+                print("Epoch={},\t batch={},\t Loss_D={:2.4f},\t Loss_G={},\t D_x={},\t D(G(z))_1={:2.4f},\t D(G(z))_2={}".format(epoch+1,i,d_loss.item(),g_loss.item(),D_x,D_G_z1,D_G_z2))
 
          
             
@@ -688,12 +638,10 @@ class MyDCGAN():
 
                
         x_train,y_train,x_test,y_test,features,df_consolidated,data_train,data_test,y,m,t=data_preprocessing.populationInit()   
-        
-        #print("x_train's type: ", type(x_train))        
 
         features=features
         latency_dim=t
-        epochs=2000
+        epochs=3000
         gpu_unit=1
 
         y_train_predict=[]
@@ -713,15 +661,7 @@ class MyDCGAN():
                 
                 i+=1
         
-        print(y_train_predict)
         y_train_predict=np.concatenate(y_train_predict,axis=0)
-
-
-
-
-        print(y_train_predict.shape)
-        print(y_train.shape)
-        
 
         y_train_predict=np.reshape(y_train_predict,(int(y_train_predict.shape[0]*y_train_predict.shape[1]),y_train_predict.shape[2]))
         y_train=np.reshape(y_train,(int(y_train.shape[0]*y_train.shape[1]),y_train.shape[2]))
@@ -737,35 +677,22 @@ class MyDCGAN():
         
                 y_test_predict_=dcgan.fit(X=X_,epochs=epochs,latency_dim=latency_dim)
 
-
-                #y_test_predict_= reshape(y_test_predict_,(y_test_predict_.shape[0],y_test_predict_.shape[2],y_test_predict_.shape[1]))
                 y_test_predict.append(y_test_predict_.detach().cpu().numpy())
                 j+=1
 
-
-
-
-        #print(y_test_predict_1)
-
-
-
-        
         trainScore=math.sqrt(mean_squared_error(y_train,y_train_predict)) 
         print('Train Score: %.5f RMSE' % (trainScore))
 
 
         
         y_test_predict=np.concatenate(y_test_predict,axis=0)
-        print(y_test_predict.shape)
-        print(y_test.shape)
 
         y_test_predict=np.reshape(y_test_predict,(int(y_test_predict.shape[0]*y_test_predict.shape[1]),y_test_predict.shape[2]))
         y_test=np.reshape(y_test,(int(y_test.shape[0]*y_test.shape[1]),y_test.shape[2]))
 
         testScore=math.sqrt(mean_squared_error(y_test,y_test_predict)) 
         print('Test Score: %.5f RMSE' % (testScore))
-        print(y_test)
-        print(y_test_predict)
+
 
         auc_value=roc_auc_score(y_test,y_test_predict)
         pauc_value=roc_auc_score(y_test,y_test_predict,max_fpr=0.1)
@@ -785,10 +712,7 @@ class MyDCGAN():
         for i in range(y.shape[0]):
             act_mean[i] = np.average(a=(y[i]))
             i+=1
-
-    
-
-           
+     
         plotnine.options.figure_size = (25, 25)
         plot = ggplot(pd.melt(pd.concat([pd.DataFrame(x_mean, columns=["AutoEncoder CNN Distribution"]).reset_index(drop=True),
                                          pd.DataFrame(act_mean, columns=["Actual Distribution"]).reset_index(drop=True)],
@@ -810,51 +734,14 @@ class MyDCGAN():
         
         #history_dict=loss_history.history
         #history_dict.keys()
-        
 
-        '''
-        loss_values = train_cost
-        loss_values500=loss_values[0:150]
-        epochs = range(1,len(loss_values500)+1)
-        plt.figure(1)
-        plt.plot(epochs,loss_values500,'b',color='blue',label='Training loss')
-        plt.title('AE-CNN Training Loss Graph')
-        plt.xlabel('Epochs')
-        plt.ylabel('Loss')
-        plt.legend(loc='best')      
-        #plt.show()
-        #plt.xticks(epochs)
-        fig=plt.gcf()
-        #fig.set_size_inches(15,7)
-        png_name_loss='output_ae_cnn_'+str(object=random_int)+'_'+str(object=n2)+'_'+timeSequence+'_loss.png'
-        plt.savefig(graph_dir_1+png_name_loss)
-        plt.close()
-        '''
-
-
-        
-        
-        
-        
-        
-        
-        
-        #print(y_1)
-        #print(y_2)
-        #print(y_1[0])
-        #print(y_1[1])
-        #print(len(y_test))
         y_test_=[]
         for i in range (len(y_test)):
             y_1=y_test[i][1]
             y_test_.append(y_1)
 
             i+=1
-        #print('y_test_',y_test_)
-        #print(len(y_test_))
-        
-        ##print(len(y_test_predict))
-        #print(y_test_predict.shape)
+
 
         y_test_predict_=[]
         for i in range (len(y_test_predict)):
@@ -862,16 +749,11 @@ class MyDCGAN():
             y_test_predict_.append(y_2_)
 
             i+=1
-        #print('y_test_predict',y_test_predict)
-        #print('y_test_predict_',y_test_predict_)
-        #print(len(y_test_predict_))
+
 
         fpr,tpr,thresholds=roc_curve(y_test_,y_test_predict_)
         roc_auc=auc(fpr,tpr)
     
-        #fpr['micro'],tpr['micro'],_=roc_curve(y_test.ravel(),y_test_predict.ravel())
-        #roc_auc['micro']=auc(fpr['micro'],tpr['micro'])
-
 
         
         print(thresholds)
@@ -884,7 +766,6 @@ class MyDCGAN():
         plt.figure(3)
         lw=2
         plt.plot(fpr,tpr,color='orange', lw=lw,label='ROC Curve (area = %0.2f)' % roc_auc)
-        #plt.plot(tpr[150:500],fpr[150:500],'b',color='blue', lw=lw,label='ROC Curve (area = %0.2f)' % roc_auc)
         plt.plot([0,1],[0,1],color='blue',lw=lw, linestyle='--')
         plt.xlim([0.0000,1.0000])
         plt.ylim([0.0000,1.0500])
@@ -899,13 +780,7 @@ class MyDCGAN():
 
         precision,recall,thresholds=precision_recall_curve(y_test_,y_test_predict_)
         prc_auc=auc(recall,precision)
-    
-        #fpr['micro'],tpr['micro'],_=roc_curve(y_test.ravel(),y_test_predict.ravel())
-        #roc_auc['micro']=auc(fpr['micro'],tpr['micro'])
 
-
-        
-        print(thresholds)
         
         print('length of precision: ', len(precision),len(recall))
         print('prc_auc: ',prc_auc)
@@ -915,7 +790,6 @@ class MyDCGAN():
         plt.figure(4)
         lw=2
         plt.plot(recall,precision,color='orange', lw=lw,label='ROC Curve (area = %0.2f)' % prc_auc)
-        #plt.plot(tpr[150:500],fpr[150:500],'b',color='blue', lw=lw,label='ROC Curve (area = %0.2f)' % roc_auc)
         plt.plot([0,1],[0.5,0.5],color='blue',lw=lw, linestyle='--')
         plt.xlim([0.0000,1.0000])
         plt.ylim([0.0000,1.05000])
@@ -927,22 +801,17 @@ class MyDCGAN():
         png_name_roc='output_aecnn_'+str(object=random_int)+'_'+str(object=n2)+'_'+timeSequence+'_prc_curve.png'
         plt.savefig(graph_dir_5+png_name_roc)
         plt.close()      
-        #print('cm: ',cm)
-        #print('Accuracy'+str(object=accuracy_score(y,y_predict)))
         
         return x_test,y_test,x_train,y_test_predict,y_train_predict,y_test_,y_test_predict_
     
     def myVisualize(self):
         x_test,y_test,x_train,y_test_predict,y_train_predict,y_test_,y_test_predict_=MyDCGAN.predict("")
-        #y_test_predict=x_predict[n2-n0:n3-n0][:,-1:]
         Diff=[]
         count=0
         totalCount=0
-        
-        print('len(y_test_predict_) is: ',len(y_test_predict_))
+
 
         x_predict_=[]
-        #predict_min=min(y_test_predict_)
         for i in range (0,len(y_test_predict_)):
             if y_test_predict[i][0]>=y_test_predict[i][1]:
                 x_predict_.append(0)
@@ -959,14 +828,11 @@ class MyDCGAN():
 
         x_predict_=np.array(x_predict_)
         x_predict_=np.reshape(x_predict_,(x_predict_.shape[0],1))
-        #x=np.reshape(y_test_,(y_test_.shape[0]))
-        #y=np.reshape(y_test_predict_,(y_test_predict_.shape[0]))
         y_=np.reshape(x_predict_,(x_predict_.shape[0]))
         
         print(x_predict_)
         d=np.concatenate((y_test_,y_),axis=0)
         df_output=pd.DataFrame(data=d)
-        #df_output = pd.DataFrame.from_records({'Actual':y_test,'Predict':x_predict_},index='Actual')
         df_output.to_csv(csv_dir+'nlpcnn_output_'+timeSequence+'.csv')
         
         cm_predict=confusion_matrix(y_test_,x_predict_)
@@ -1001,10 +867,6 @@ class MyDCGAN():
         f.write('mse={}\n'.format(mse))
         f.close()
                 
-        
-        
-        #d=np.concatenate((y_test,y_predict),axis=1)
-        #df_output=pd.DataFrame(data=d)
         df_output = pd.DataFrame.from_records({'Actual':y_test_,'Predict':y_test_predict_,'Binary Prediction': y_},index='Actual')
         df_output.to_csv(csv_dir+'aecnn_output_'+timeSequence+'.csv')
         
@@ -1023,56 +885,19 @@ class MyDCGAN():
         png_name_aecnn = 'prediction_aecnn_line_'+str(object=random_int)+'_'+str(object=n2)+'_'+timeSequence+'.png'
         fig.savefig(graph_dir+png_name_aecnn)
         plt.close()
-        
-        
-        #y_test_predict_=y_test_predict[:,0]
-
-
-        
-
-
-        '''
-        x,y,k_means=SVMAnalysis.myKmeans()
-        sse=0
-        f= open(log_dir+'kmeans_log.txt','w')
-        f.write('----------------------------------------------------\n') 
-        for i in range(0,n_class):
-            f.write('class{}\n'.format(i))
-            #print('class',i,':',)    
-            ssep=0
-            for j in range(0,len(x)):
-                if k_means.labels_[j]==i:
-                    #print(player[j],',',points[j],',')
-                    f.write('parameters={}\n'.format(x[j]))
-                    ssep +=sqeuclidean(k_means.cluster_centers_[i],x[j])
-                    sse +=sqeuclidean(k_means.cluster_centers_[i],x[j])
-            f.write('SSE P:{}\n'.format(ssep))
-            #print('SSE P:',ssep)
-            #print('\n')
-        f.write('SSE T_test:{}\n'.format(k_means.inertia_))
-        f.write('SSE T_test_2:{}\n'.format(sse))
-        f.close()
-        #print('SSE T_test:',k_means.inertia_)
-        #print('\n')
-        #print('SSE T_test_2:',sse)
-        '''
 
         del x_test
         del y_test
-        #del x_train_pca
         del y_train_predict
         del y_test_predict
         del x_predict_
         del y_
         del y_test_
         del y_test_predict_
-        #del k_means
 
         
 if __name__=='__main__':
-  for i in range(1):
+  for i in range(5):
     x=MyDCGAN()
     x.myVisualize()
     i+=1
-    #x=data_preprocessing()
-    #x.populationInit()
